@@ -10,8 +10,8 @@
 //! _Cargo.toml_:
 //! ```toml
 //! [dependencies]
-//! cdumay_error = "0.1"
-//! cdumay_result = "1.0"
+//! cdumay_error = { git = "https://github.com/cdumay/rust-cdumay_error" }
+//! cdumay_result = { git = "https://github.com/cdumay/rust-cdumay_result" }
 //! ```
 //!
 //! _main.rs_:
