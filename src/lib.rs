@@ -10,49 +10,54 @@
 //! _Cargo.toml_:
 //! ```toml
 //! [dependencies]
-//! cdumay_http_client = "0.1"
-//! serde_json = "1.0"
-//! serde-value = "0.6"
+//! cdumay_error = "0.1"
+//! cdumay_result = "1.0"
 //! ```
 //!
 //! _main.rs_:
 //!
 //! ```rust
-//! extern crate cdumay_result;
-//! extern crate serde_json;
-//! extern crate serde_value;
+//! extern crate cdumay_error;
+//! extern crate cdumay_http_client;
+//!
+//! use cdumay_error::ErrorRepr;
+//! use cdumay_http_client::authentication::NoAuth;
+//! use cdumay_http_client::{ClientBuilder, HttpClient};
 //!
 //! fn main() {
-//!     use cdumay_result::ResultReprBuilder;
-//!     use std::collections::HashMap;
-//!     use serde_value::Value;
+//!     let cli = HttpClient::<NoAuth>::new("https://www.rust-lang.org").unwrap();
+//!     let result = cli.get("/learn/get-started".into(), None, None, None);
 //!
-//!     let result = ResultReprBuilder::new(None, None)
-//!         .stdout("A useful result !".to_string())
-//!         .retval({
-//!             let mut retval = HashMap::new();
-//!             retval.insert("one".to_string(), Value::I32(1));
-//!             retval
-//!         })
-//!         .build();
-//!     println!("{}", serde_json::to_string_pretty(&result).unwrap());
-//! }
+//!     match result {
+//!         Ok(data) => println!("{}", data),
+//!         Err(err) => println!("{}", serde_json::to_string_pretty(&ErrorRepr::from(err)).unwrap()),
+//!     }
 //! ```
 //! _Output_:
+//! ```html
+//! <!doctype html>
+//! <html lang="en-US">
+//!   <head>
+//!     <meta charset="utf-8">
+//!     <title>
+//! [...]
+//! ```
+//! ## Errors
+//!
+//! Errors can be displayed using [cdumay_error](https://docs.serde.rs/cdumay_error/):
+//!
 //! ```json
 //! {
-//!   "uuid": "166d5744-b159-48b5-b8c6-9242abd8ebfb",
-//!   "retcode": 0,
-//!   "stdout": "A useful result !",
-//!   "retval": {
-//!     "one": 1
-//!   }
+//!   "code": 500,
+//!   "message": "error trying to connect",
+//!   "msgid": "Err-05192"
 //! }
 //! ```
+//!
 //! ## Project Links
 //!
-//! - Issues: https://github.com/cdumay/rust-cdumay_result/issues
-//! - Documentation: https://docs.rs/cdumay_result
+//! - Issues: https://github.com/cdumay/rust-cdumay_http_client/issues
+//! - Documentation: https://docs.rs/cdumay_http_client
 #![feature(try_trait)]
 extern crate base64;
 extern crate cdumay_error;
