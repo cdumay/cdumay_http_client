@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::fmt;
 
 use cdumay_error::{ErrorInfo, ErrorType, GenericErrors, Registry};
 use http::StatusCode;
@@ -271,5 +272,11 @@ impl HttpStatusCodeErrors {
             StatusCode::NETWORK_AUTHENTICATION_REQUIRED => HttpStatusCodeErrors::NETWORK_AUTHENTICATION_REQUIRED,
             _ => panic!("{} is not an error!", status),
         }
+    }
+}
+
+impl fmt::Display for ClientError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.msgid(), self.message())
     }
 }
