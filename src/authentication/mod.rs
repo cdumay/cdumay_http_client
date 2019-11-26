@@ -1,13 +1,14 @@
+use std::fmt::Debug;
+
 use reqwest::header::{HeaderName, HeaderValue};
 
 pub mod basic;
 
-pub trait Authentication: Sized {
+pub trait Authentication: Debug {
     fn username(&self) -> Option<String>;
     fn password(&self) -> Option<String>;
     fn as_header(&self) -> Option<(HeaderName, HeaderValue)>;
 }
-
 
 #[derive(Debug)]
 pub struct NoAuth;

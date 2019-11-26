@@ -15,19 +15,19 @@ pub struct CallContext {
     pub method: Method,
 }
 
-pub trait ClientBuilder<A: Authentication> {
+pub trait ClientBuilder {
     fn new(url_root: &str) -> Result<Self, ClientError> where Self: std::marker::Sized;
     fn set_timeout(self, timeout: u64) -> Self;
     fn set_headers(self, headers: HeaderMap) -> Self;
-    fn set_auth(self, auth: A) -> Self;
+    fn set_auth<A: Authentication + 'static>(self, auth: A) -> Self;
 }
 
-pub trait BaseClient<A: Authentication> {
+pub trait BaseClient {
     // To implement
     fn url_root(&self) -> &Url;
     fn timeout(&self) -> &u64;
     fn headers(&self) -> &HeaderMap;
-    fn auth(&self) -> &Option<A>;
+    fn auth(&self) -> Option<&Box<dyn Authentication>>;
 
     fn do_request(&self, method: Method, path: String, params: Option<HashMap<String, String>>, data: Option<String>, headers: Option<HeaderMap>, timeout: Option<u64>) -> Result<String, ClientError> {
         let start = chrono::Utc::now();
@@ -69,16 +69,16 @@ pub trait BaseClient<A: Authentication> {
 
 
 #[derive(Debug)]
-pub struct HttpClient<A: Authentication> {
+pub struct HttpClient {
     url_root: Url,
     timeout: u64,
     headers: HeaderMap,
-    auth: Option<A>,
+    auth: Option<Box<dyn Authentication>>,
 }
 
 
-impl<A: Authentication> ClientBuilder<A> for HttpClient<A> {
-    fn new(url_root: &str) -> Result<HttpClient<A>, ClientError> {
+impl ClientBuilder for HttpClient {
+    fn new(url_root: &str) -> Result<HttpClient, ClientError> {
         Ok(HttpClient {
             url_root: Url::parse(url_root.trim_end_matches("/"))?,
             timeout: 10,
@@ -93,28 +93,28 @@ impl<A: Authentication> ClientBuilder<A> for HttpClient<A> {
             auth: None,
         })
     }
-    fn set_timeout(mut self, timeout: u64) -> HttpClient<A> {
+    fn set_timeout(mut self, timeout: u64) -> HttpClient {
         self.timeout = timeout;
         self
     }
-    fn set_headers(mut self, headers: HeaderMap) -> HttpClient<A> {
+    fn set_headers(mut self, headers: HeaderMap) -> HttpClient {
         self.headers.extend(headers);
         self
     }
-    fn set_auth(mut self, auth: A) -> HttpClient<A> {
-        self.auth = Some(auth);
+    fn set_auth<A: Authentication + 'static>(mut self, auth: A) -> HttpClient {
+        self.auth = Some(Box::new(auth));
         self
     }
 }
 
-impl<A: Authentication> BaseClient<A> for HttpClient<A> {
+impl BaseClient for HttpClient {
     fn url_root(&self) -> &Url { &self.url_root }
     fn timeout(&self) -> &u64 { &self.timeout }
     fn headers(&self) -> &HeaderMap { &self.headers }
-    fn auth(&self) -> &Option<A> { &self.auth }
+    fn auth(&self) -> Option<&Box<dyn Authentication>> { self.auth.as_ref() }
 }
 
-impl<A: Authentication> HttpClient<A> {
+impl HttpClient {
     pub fn get(&self, path: String, params: Option<HashMap<String, String>>, headers: Option<HeaderMap>, timeout: Option<u64>) -> Result<String, ClientError> {
         self.do_request(Method::GET, path, params, None, headers, timeout)
     }
