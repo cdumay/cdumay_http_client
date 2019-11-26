@@ -2,7 +2,7 @@ use reqwest::header::{HeaderName, HeaderValue};
 
 pub mod basic;
 
-pub trait Authentication {
+pub trait Authentication: Sized {
     fn username(&self) -> Option<String>;
     fn password(&self) -> Option<String>;
     fn as_header(&self) -> Option<(HeaderName, HeaderValue)>;
