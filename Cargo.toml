@@ -1,14 +1,14 @@
 [package]
 name = "cdumay_http_client"
-version = "0.3.0"
+version = "0.3.1"
 
 authors = ["Cédric Dumay <cedric.dumay@gmail.com>"]
 categories = ["authentication",  "data-structures", "encoding", "parsing", "web-programming::http-client"]
 description = """A library to call remote web application"""
-documentation = "https://docs.rs/cdumay_result"
+documentation = "https://docs.rs/cdumay_http_client"
 edition = "2021"
-homepage =  "https://github.com/cdumay/rust-cdumay_result"
-keywords = ["http", "serde", "REST"]
+homepage =  "https://github.com/cdumay/rust-cdumay_http_client"
+keywords = ["http", "serde"]
 license = "BSD-3-Clause"
 readme = "README.md"
 repository = "https://github.com/cdumay/rust-cdumay_http_client"
