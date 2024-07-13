@@ -1,41 +1,43 @@
-# cdumay_http_client
+# cdumay_http_client ![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue) [![cdumay_http_client on crates.io](https://img.shields.io/crates/v/cdumay_http_client)](https://crates.io/crates/cdumay_http_client) [![cdumay_http_client on docs.rs](https://docs.rs/cdumay_http_client/badge.svg)](https://docs.rs/cdumay_http_client) [![Source Code Repository](https://img.shields.io/badge/Code-On%20GitHub-blue?logo=GitHub)](https://github.com/cdumay/rust-cdumay_http_client)
 
-[![Build Status](https://travis-ci.org/cdumay/rust-cdumay_http_client.svg?branch=master)](https://travis-ci.org/cdumay/rust-cdumay_http_client)
-[![Latest version](https://img.shields.io/crates/v/cdumay_http_client.svg)](https://crates.io/crates/cdumay_http_client)
-[![Documentation](https://docs.rs/cdumay_http_client/badge.svg)](https://docs.rs/cdumay_http_client)
-![License](https://img.shields.io/crates/l/cdumay_http_client.svg)
+cdumay_http_client is a basic library used to standardize result and serialize them using [serde][__link0].
 
-cdumay_http_client is a basic library used to standardize result and serialize them using [serde](https://docs.serde.rs/serde/).
+### Quickstart
 
-## Quickstart
+*Cargo.toml*:
 
-_Cargo.toml_:
 ```toml
 [dependencies]
-cdumay_error = { git = "https://github.com/cdumay/rust-cdumay_error" }
-cdumay_result = { git = "https://github.com/cdumay/rust-cdumay_result" }
+cdumay_error = "0.3"
+cdumay_result = "0.3"
+cdumay_http_client = "0.3"
 ```
 
-_main.rs_:
+*main.rs*:
 
 ```rust
 extern crate cdumay_error;
 extern crate cdumay_http_client;
+extern crate serde_json;
 
-use cdumay_error::ErrorRepr;
+use cdumay_error::JsonError;
 use cdumay_http_client::authentication::NoAuth;
 use cdumay_http_client::{ClientBuilder, HttpClient};
 
 fn main() {
-    let cli = HttpClient::<NoAuth>::new("https://www.rust-lang.org").unwrap();
-    let result = cli.get("/learn/get-started".into(), None, None, None);
+    use cdumay_http_client::BaseClient;
+let cli = HttpClient::new("https://www.rust-lang.org").unwrap();
+    let result = cli.get("/learn/get-started".into(), None, None, None, None);
 
     match result {
         Ok(data) => println!("{}", data),
-        Err(err) => println!("{}", serde_json::to_string_pretty(&ErrorRepr::from(err)).unwrap()),
+        Err(err) => println!("{}", serde_json::to_string_pretty(&JsonError::from(err)).unwrap()),
     }
+}
 ```
-_Output_:
+
+*Output*:
+
 ```html
 <!doctype html>
 <html lang="en-US">
@@ -44,9 +46,10 @@ _Output_:
     <title>
 [...]
 ```
-## Errors
 
-Errors can be displayed using [cdumay_error](https://docs.serde.rs/cdumay_error/):
+### Errors
+
+Errors can be displayed using [cdumay_error][__link1]:
 
 ```json
 {
@@ -56,9 +59,6 @@ Errors can be displayed using [cdumay_error](https://docs.serde.rs/cdumay_error/
 }
 ```
 
-## Project Links
 
-- Issues: https://github.com/cdumay/rust-cdumay_http_client/issues
-- Documentation: https://docs.rs/cdumay_http_client
-
-License: MIT
+ [__link0]: https://docs.serde.rs/serde/
+ [__link1]: https://docs.serde.rs/cdumay_error/

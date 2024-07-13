@@ -1,6 +1,5 @@
+use base64::prelude::*;
 use reqwest::header::{AUTHORIZATION, HeaderName, HeaderValue};
-
-use base64::encode;
 
 use crate::authentication::Authentication;
 
@@ -28,7 +27,7 @@ impl Authentication for BasicAuth {
             Some(password) => format!("{}:{}", self.username, password),
             None => format!("{}:", self.username)
         };
-        let header_value = format!("Basic {}", encode(&auth));
+        let header_value = format!("Basic {}", BASE64_STANDARD.encode(&auth));
         Some((AUTHORIZATION, HeaderValue::from_str(&*header_value).unwrap()))
     }
 }

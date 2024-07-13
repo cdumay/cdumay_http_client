@@ -1,8 +1,3 @@
-//! [![Build Status](https://travis-ci.org/cdumay/rust-cdumay_http_client.svg?branch=master)](https://travis-ci.org/cdumay/rust-cdumay_http_client)
-//! [![Latest version](https://img.shields.io/crates/v/cdumay_http_client.svg)](https://crates.io/crates/cdumay_http_client)
-//! [![Documentation](https://docs.rs/cdumay_http_client/badge.svg)](https://docs.rs/cdumay_http_client)
-//! ![License](https://img.shields.io/crates/l/cdumay_http_client.svg)
-//!
 //! cdumay_http_client is a basic library used to standardize result and serialize them using [serde](https://docs.serde.rs/serde/).
 //!
 //! ## Quickstart
@@ -10,8 +5,9 @@
 //! _Cargo.toml_:
 //! ```toml
 //! [dependencies]
-//! cdumay_error = { git = "https://github.com/cdumay/rust-cdumay_error" }
-//! cdumay_result = { git = "https://github.com/cdumay/rust-cdumay_result" }
+//! cdumay_error = "0.3"
+//! cdumay_result = "0.3"
+//! cdumay_http_client = "0.3"
 //! ```
 //!
 //! _main.rs_:
@@ -19,19 +15,22 @@
 //! ```rust
 //! extern crate cdumay_error;
 //! extern crate cdumay_http_client;
+//! extern crate serde_json;
 //!
-//! use cdumay_error::ErrorRepr;
+//! use cdumay_error::JsonError;
 //! use cdumay_http_client::authentication::NoAuth;
 //! use cdumay_http_client::{ClientBuilder, HttpClient};
 //!
 //! fn main() {
-//!     let cli = HttpClient::<NoAuth>::new("https://www.rust-lang.org").unwrap();
-//!     let result = cli.get("/learn/get-started".into(), None, None, None);
+//!     use cdumay_http_client::BaseClient;
+//! let cli = HttpClient::new("https://www.rust-lang.org").unwrap();
+//!     let result = cli.get("/learn/get-started".into(), None, None, None, None);
 //!
 //!     match result {
 //!         Ok(data) => println!("{}", data),
-//!         Err(err) => println!("{}", serde_json::to_string_pretty(&ErrorRepr::from(err)).unwrap()),
+//!         Err(err) => println!("{}", serde_json::to_string_pretty(&JsonError::from(err)).unwrap()),
 //!     }
+//! }
 //! ```
 //! _Output_:
 //! ```html
@@ -53,13 +52,6 @@
 //!   "msgid": "Err-05192"
 //! }
 //! ```
-//!
-//! ## Project Links
-//!
-//! - Issues: https://github.com/cdumay/rust-cdumay_http_client/issues
-//! - Documentation: https://docs.rs/cdumay_http_client
-#![feature(try_trait)]
-extern crate base64;
 extern crate cdumay_error;
 extern crate cdumay_result;
 extern crate chrono;
@@ -69,7 +61,8 @@ extern crate humantime;
 extern crate log;
 extern crate reqwest;
 extern crate serde;
-extern crate serde_value;
+extern crate base64;
+extern crate serde_json;
 
 pub use client::{BaseClient, CallContext, ClientBuilder, HttpClient};
 pub use errors::{ClientError, HttpStatusCodeErrors, ResponseErrorWithContext};
