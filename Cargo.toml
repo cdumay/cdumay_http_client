@@ -1,6 +1,6 @@
 [package]
 name = "cdumay_http_client"
-version = "0.3.1"
+version = "0.3.2"
 
 authors = ["Cédric Dumay <cedric.dumay@gmail.com>"]
 categories = ["authentication",  "data-structures", "encoding", "parsing", "web-programming::http-client"]

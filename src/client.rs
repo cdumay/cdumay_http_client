@@ -31,8 +31,6 @@ pub trait ClientBuilder {
 }
 
 pub trait BaseClient {
-    type Output;
-
     // To implement
     fn url_root(&self) -> &Url;
     fn timeout(&self) -> &u64;
@@ -40,11 +38,10 @@ pub trait BaseClient {
     fn auth(&self) -> Option<&Box<dyn Authentication>>;
     fn try_number(&self) -> u64;
     fn retry_delay(&self) -> u64;
-    fn _parse_response(&self, response: Response, context: BTreeMap<String, Value>) -> Result<Self::Output, Error>;
     fn _request_wrapper(&self, req: RequestBuilder) -> Result<Response, Error> {
         Ok(req.send().map_err(|err| ErrorBuilder::from(ClientError::from(err)).build())?)
     }
-    fn do_request(&self, method: Method, path: String, params: Option<HashMap<String, String>>, data: Option<String>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<Self::Output, Error> {
+    fn do_request(&self, method: Method, path: String, params: Option<HashMap<String, String>>, data: Option<String>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<String, Error> {
         let start = Utc::now();
         let url = build_url(self.url_root(), path, params).map_err(|err| ErrorBuilder::from(err).build())?;
         let context = {
@@ -79,7 +76,13 @@ pub trait BaseClient {
                     match resp.status().is_success() {
                         true => {
                             info!("{} {} - {} - {} [{}]", &method, &url.as_str(), resp.status(), length, &human);
-                            return Ok(self._parse_response(resp, context.clone().into())?);
+                            return Ok(
+                                resp
+                                    .text()
+                                    .map_err(
+                                        |err| ErrorBuilder::from(ClientError::from(err)).extra(context.clone().into()).build()
+                                    )?
+                            );
                         }
                         false => {
                             error!("{} {} - {} - {} [{}]", &method, &url.as_str(), resp.status(), length, &human);
@@ -121,18 +124,6 @@ pub trait BaseClient {
     fn head(&self, path: String, params: Option<HashMap<String, String>>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<(), Error> {
         self.do_request(Method::HEAD, path, params, None, headers, timeout, no_retry_on)?;
         Ok(())
-    }
-    fn get(&self, path: String, params: Option<HashMap<String, String>>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<Self::Output, Error> {
-        self.do_request(Method::GET, path, params, None, headers, timeout, no_retry_on)
-    }
-    fn post(&self, path: String, params: Option<HashMap<String, String>>, data: Option<String>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<Self::Output, Error> {
-        self.do_request(Method::POST, path, params, data, headers, timeout, no_retry_on)
-    }
-    fn put(&self, path: String, params: Option<HashMap<String, String>>, data: Option<String>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<Self::Output, Error> {
-        self.do_request(Method::PUT, path, params, data, headers, timeout, no_retry_on)
-    }
-    fn delete(&self, path: String, params: Option<HashMap<String, String>>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<Self::Output, Error> {
-        self.do_request(Method::DELETE, path, params, None, headers, timeout, no_retry_on)
     }
 }
 
@@ -194,28 +185,36 @@ impl ClientBuilder for HttpClient {
 }
 
 impl BaseClient for HttpClient {
-    type Output = String;
     fn url_root(&self) -> &Url { &self.url_root }
     fn timeout(&self) -> &u64 { &self.timeout }
     fn headers(&self) -> &HeaderMap { &self.headers }
     fn auth(&self) -> Option<&Box<dyn Authentication>> { self.auth.as_ref() }
     fn try_number(&self) -> u64 { self.try_number }
     fn retry_delay(&self) -> u64 { self.retry_delay }
-    fn _parse_response(&self, response: Response, context: BTreeMap<String, Value>) -> Result<Self::Output, Error> {
-        response
-            .text()
-            .map_err(
-                |err| ErrorBuilder::from(ClientError::from(err)).extra(context.clone().into()).build()
-            )
+}
+
+impl HttpClient {
+    pub fn get(&self, path: String, params: Option<HashMap<String, String>>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<String, Error> {
+        self.do_request(Method::GET, path, params, None, headers, timeout, no_retry_on)
+    }
+    pub fn post(&self, path: String, params: Option<HashMap<String, String>>, data: Option<String>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<String, Error> {
+        self.do_request(Method::POST, path, params, data, headers, timeout, no_retry_on)
+    }
+    pub fn put(&self, path: String, params: Option<HashMap<String, String>>, data: Option<String>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<String, Error> {
+        self.do_request(Method::PUT, path, params, data, headers, timeout, no_retry_on)
+    }
+    pub fn delete(&self, path: String, params: Option<HashMap<String, String>>, headers: Option<HeaderMap>, timeout: Option<u64>, no_retry_on: Option<Vec<ErrorKind>>) -> Result<String, Error> {
+        self.do_request(Method::DELETE, path, params, None, headers, timeout, no_retry_on)
     }
 }
 
 #[cfg(test)]
 mod test {
     use std::sync::Once;
+
     use simple_logger::SimpleLogger;
 
-    use crate::{BaseClient, ClientBuilder, HttpClient, HttpStatusCodeErrors};
+    use crate::{ClientBuilder, HttpClient, HttpStatusCodeErrors};
 
     static INIT: Once = Once::new();
 
