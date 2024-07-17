@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use cdumay_error::{ErrorBuilder, ErrorKind, GenericErrors};
-use serde_json::value::Value;
+use cdumay_core::Value;
 
 #[derive(Debug)]
 pub struct ResponseErrorWithContext {

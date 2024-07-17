@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use reqwest::{Method, Url};
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
-use serde_json::Value;
+use cdumay_core::Value;
 
 use crate::authentication::Authentication;
 use crate::ClientError;

@@ -20,8 +20,9 @@ maintenance = { status = "as-is" }
 
 [dependencies]
 base64 = "0.22.1"
-cdumay_error = "0.3.0"
-cdumay_result = "0.3.0"
+cdumay_core = { git = "https://github.com/cdumay/rust-cdumay_core" }
+cdumay_error = { git = "https://github.com/cdumay/rust-cdumay_error" }
+cdumay_result = { git = "https://github.com/cdumay/rust-cdumay_result" }
 chrono = "0.4.38"
 http = "1.1.0"
 humantime = "2.1.0"
