@@ -1,36 +1,30 @@
 [package]
 name = "cdumay_http_client"
-version = "0.3.2"
+version = "1.0.0"
 
 authors = ["Cédric Dumay <cedric.dumay@gmail.com>"]
-categories = ["authentication",  "data-structures", "encoding", "parsing", "web-programming::http-client"]
-description = """A library to call remote web application"""
+categories = ["authentication", "data-structures", "encoding", "parsing", "web-programming::http-client"]
+description = """A bundle of http clients to call remote web application"""
 documentation = "https://docs.rs/cdumay_http_client"
 edition = "2021"
-homepage =  "https://github.com/cdumay/rust-cdumay_http_client"
+homepage = "https://github.com/cdumay/cdumay_http_client"
 keywords = ["http", "serde"]
-license = "BSD-3-Clause"
+license-file = "LICENSE"
 readme = "README.md"
-repository = "https://github.com/cdumay/rust-cdumay_http_client"
-
-[badges]
-gitlab = { repository = "cdumay/rust-cdumay_http_client" }
-travis-ci = { repository = "cdumay/rust-cdumay_http_client" }
-maintenance = { status = "as-is" }
+repository = "https://github.com/cdumay/cdumay_http_client"
 
 [dependencies]
-base64 = "0.22.1"
-cdumay_core = { git = "https://github.com/cdumay/rust-cdumay_core" }
-cdumay_error = { git = "https://github.com/cdumay/rust-cdumay_error" }
-cdumay_result = { git = "https://github.com/cdumay/rust-cdumay_result" }
-chrono = "0.4.38"
-http = "1.1.0"
-humantime = "2.1.0"
-log = "0.4.22"
-reqwest = { version = "0.12.5", features = ["json", "blocking"] }
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.117"
-url = "2.5.2"
+base64 = "0.22"
+cdumay_error = { version = "1.0", features = ["derive"] }
+cdumay_context = "1.0"
+chrono = "0.4"
+http = "1.2"
+humantime = "2.1"
+log = "0.4"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde-value = "0.7"
+serde_json = "1.0"
 
 [dev-dependencies]
-simple_logger = "5.0.0"
+simple_logger = "5.0"

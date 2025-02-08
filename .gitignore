@@ -1,6 +1,2 @@
-*.iml
-.cargo
-.idea
 Cargo.lock
 target
-tests
