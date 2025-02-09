@@ -1,3 +1,141 @@
+/*!
+# HTTP Client Module
+
+This module provides a robust and feature-rich HTTP client implementation with support for:
+- Automatic retry mechanism
+- Custom authentication
+- Request/response header management
+- Timeout configuration
+- SSL verification
+- Error handling with detailed context
+
+## Features
+
+- Builder pattern for easy client configuration
+- Support for all standard HTTP methods (GET, POST, PUT, DELETE, HEAD)
+- Automatic retry with configurable attempts and delay
+- Custom authentication support
+- Header management
+- Query parameter support
+- Detailed error reporting with context
+- Logging of request/response details
+
+## Examples
+
+### Basic Usage
+
+```rust
+use cdumay_http_client::{ClientBuilder, HttpClient};
+use std::collections::HashMap;
+
+// Create a new client
+let client = HttpClient::new("https://api.example.com").unwrap()
+    .set_timeout(30)       // 30 seconds timeout
+    .set_retry_number(3)   // Retry 3 times
+    .set_retry_delay(5);   // 5 seconds between retries
+
+// Make a GET request
+let result = client.get(
+    "/users".to_string(),
+    None,                  // No query parameters
+    None,                  // No additional headers
+    None,                  // Use default timeout
+    None,                  // Use default retry behavior
+);
+
+// Make a POST request with data
+let result = client.post(
+    "/users".to_string(),
+    None,                  // No query parameters
+    Some("{'name':'John'}".to_string()),
+    None,                  // No additional headers
+    None,                  // Use default timeout
+    None,                  // Use default retry behavior
+);
+```
+
+### Query Parameters
+
+```rust
+use std::collections::HashMap;
+use cdumay_http_client::{ClientBuilder, HttpClient};
+
+let mut params = HashMap::new();
+params.insert("page".to_string(), "1".to_string());
+params.insert("limit".to_string(), "10".to_string());
+
+let client = HttpClient::new("https://api.example.com").unwrap();
+
+let result = client.get(
+    "/users".to_string(),
+    Some(params),
+    None,
+    None,
+    None,
+);
+```
+
+### Custom Headers
+
+```rust
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use cdumay_http_client::{ClientBuilder, HttpClient};
+
+let mut headers = HeaderMap::new();
+headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+let client = HttpClient::new("https://api.example.com").unwrap();
+
+let result = client.post(
+    "/users".to_string(),
+    None,
+    Some("{'name':'John'}".to_string()),
+    Some(headers),
+    None,
+    None,
+);
+```
+
+### Error Handling
+
+```rust
+use cdumay_error::ErrorKind;
+use cdumay_http_client::{ClientBuilder, HttpClient};
+use cdumay_http_client::errors::http::{NOT_FOUND, FORBIDDEN};
+
+// Specify error types that should not trigger retry
+let no_retry = vec![
+    NOT_FOUND,
+    FORBIDDEN
+];
+
+let client = HttpClient::new("https://api.example.com").unwrap();
+
+let result = client.get(
+    "/users/123".to_string(),
+    None,
+    None,
+    None,
+    Some(no_retry),
+);
+```
+
+### Authentication
+
+```rust
+use cdumay_http_client::authentication::basic::BasicAuth;
+use cdumay_http_client::{HttpClient, ClientBuilder};
+
+let auth = BasicAuth::new(
+    "username".to_string(),
+    Some("password".to_string())
+);
+
+let client = HttpClient::new("https://api.example.com").unwrap()
+    .set_auth(auth);
+```
+*/
+
 use cdumay_context::Context;
 use cdumay_error::{Error, ErrorKind, Result};
 use chrono::Utc;
@@ -14,30 +152,101 @@ use crate::errors::client::{ClientBuilderError, InvalidHeaderValue, InvalidUrl};
 use crate::errors::{http_error_serialize, http_resp_serialise};
 use crate::utils::{build_url, merge_headers};
 
+/// Trait for building HTTP clients with configurable settings.
+///
+/// This trait provides a builder pattern for creating and configuring HTTP clients.
+/// Implementations can customize various aspects like timeout, headers, authentication,
+/// SSL verification, and retry behavior.
 pub trait ClientBuilder {
+    /// Creates a new client instance with the specified root URL.
+    ///
+    /// # Arguments
+    ///
+    /// * `url_root` - Base URL for all requests made by this client
+    ///
+    /// # Returns
+    ///
+    /// Returns `Result<Self>` which is:
+    /// - `Ok(Self)` if client creation is successful
+    /// - `Err` with an `InvalidUrl` error if URL parsing fails
     fn new(url_root: &str) -> Result<Self>
     where
         Self: Sized;
+
+    /// Sets the request timeout in seconds.
     fn set_timeout(self, timeout: u64) -> Self;
+
+    /// Sets custom headers for all requests.
     fn set_headers(self, headers: HeaderMap) -> Self;
+
+    /// Sets the authentication method for all requests.
     fn set_auth<A: Authentication + 'static>(self, auth: A) -> Self;
+
+    /// Enables or disables SSL certificate verification.
     fn set_ssl_verify(self, ssl_verify: bool) -> Self;
+
+    /// Sets the number of retry attempts for failed requests.
     fn set_retry_number(self, try_number: u64) -> Self;
+
+    /// Sets the delay between retry attempts in seconds.
     fn set_retry_delay(self, try_number: u64) -> Self;
 }
 
+/// Base trait for HTTP client implementations.
+///
+/// This trait defines the core functionality that all HTTP clients must implement,
+/// including configuration getters and request handling.
 pub trait BaseClient {
-    // To implement
+    /// Returns the root URL for all requests.
     fn url_root(&self) -> &Url;
+
+    /// Returns the configured timeout in seconds.
     fn timeout(&self) -> &u64;
+
+    /// Returns the configured headers.
     fn headers(&self) -> &HeaderMap;
+
+    /// Returns the configured authentication method, if any.
     fn auth(&self) -> Option<&Box<dyn Authentication>>;
+
+    /// Returns whether SSL verification is enabled.
     fn ssl_verify(&self) -> bool;
+
+    /// Returns the number of retry attempts for failed requests.
     fn retry_number(&self) -> u64;
+
+    /// Returns the delay between retry attempts in seconds.
     fn retry_delay(&self) -> u64;
+
+    /// Internal method to wrap request execution with error handling.
     fn _request_wrapper(&self, req: RequestBuilder) -> Result<Response> {
         Ok(req.send().map_err(|err| http_error_serialize(&err, None))?)
     }
+
+    /// Makes an HTTP request with the specified parameters.
+    ///
+    /// This method handles all the request logic including:
+    /// - URL construction
+    /// - Header management
+    /// - Authentication
+    /// - Retry logic
+    /// - Error handling
+    ///
+    /// # Arguments
+    ///
+    /// * `method` - HTTP method to use
+    /// * `path` - Request path relative to the root URL
+    /// * `params` - Optional query parameters
+    /// * `data` - Optional request body
+    /// * `headers` - Optional additional headers
+    /// * `timeout` - Optional custom timeout for this request
+    /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    ///
+    /// # Returns
+    ///
+    /// Returns `Result<String>` which is:
+    /// - `Ok(String)` containing the response body if successful
+    /// - `Err` with detailed error information if the request fails
     fn do_request(
         &self,
         method: Method,
@@ -149,6 +358,29 @@ pub trait BaseClient {
             }
         }
     }
+
+    /// Makes an HEAD request with the specified parameters.
+    ///
+    /// This method handles all the request logic including:
+    /// - URL construction
+    /// - Header management
+    /// - Retry logic
+    /// - Error handling
+    ///
+    /// # Arguments
+    ///
+    /// * `method` - HTTP method to use
+    /// * `path` - Request path relative to the root URL
+    /// * `params` - Optional query parameters
+    /// * `headers` - Optional additional headers
+    /// * `timeout` - Optional custom timeout for this request
+    /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    ///
+    /// # Returns
+    ///
+    /// Returns `Result<String>` which is:
+    /// - `Ok(())` No response is required
+    /// - `Err` with detailed error information if the request fails
     fn head(
         &self,
         path: String,
@@ -170,6 +402,41 @@ pub trait BaseClient {
     }
 }
 
+/// HTTP client implementation with retry capabilities and configurable settings.
+///
+/// This struct provides a concrete implementation of both `ClientBuilder` and
+/// `BaseClient` traits, offering a fully-featured HTTP client with:
+/// - Automatic retry mechanism
+/// - Custom authentication support
+/// - Header management
+/// - Timeout configuration
+/// - SSL verification
+///
+/// # Examples
+///
+/// ```rust
+/// use cdumay_http_client::{ClientBuilder, HttpClient};
+/// use cdumay_http_client::authentication::basic::BasicAuth;
+///
+/// // Create a client with basic authentication
+/// let client = HttpClient::new("https://api.example.com").unwrap()
+///     .set_timeout(30)
+///     .set_auth(BasicAuth::new(
+///         "username".to_string(),
+///         Some("password".to_string())
+///     ))
+///     .set_retry_number(3)
+///     .set_retry_delay(5);
+///
+/// // Make a GET request
+/// let result = client.get(
+///     "/users".to_string(),
+///     None,
+///     None,
+///     None,
+///     None,
+/// );
+/// ```
 #[derive(Debug)]
 pub struct HttpClient {
     url_root: Url,
@@ -182,7 +449,7 @@ pub struct HttpClient {
 }
 
 impl ClientBuilder for HttpClient {
-    fn new(url_root: &str) -> Result<HttpClient> {
+    fn new(url_root: &str) -> Result<Self> {
         Ok(HttpClient {
             url_root: Url::parse(url_root.trim_end_matches("/")).map_err(|err| {
                 InvalidUrl::new()
@@ -213,30 +480,36 @@ impl ClientBuilder for HttpClient {
             retry_delay: 30,
         })
     }
-    fn set_timeout(mut self, timeout: u64) -> HttpClient {
+
+    fn set_timeout(mut self, timeout: u64) -> Self {
         self.timeout = timeout;
         self
     }
-    fn set_headers(mut self, headers: HeaderMap) -> HttpClient {
+
+    fn set_headers(mut self, headers: HeaderMap) -> Self {
         self.headers.extend(headers);
         self
     }
-    fn set_auth<A: Authentication + 'static>(mut self, auth: A) -> HttpClient {
+
+    fn set_auth<A: Authentication + 'static>(mut self, auth: A) -> Self {
         self.auth = Some(Box::new(auth));
         self
     }
-    fn set_ssl_verify(mut self, ssl_verify: bool) -> HttpClient {
+
+    fn set_ssl_verify(mut self, ssl_verify: bool) -> Self {
         self.ssl_verify = ssl_verify;
         self
     }
-    fn set_retry_number(mut self, retry_number: u64) -> HttpClient {
+
+    fn set_retry_number(mut self, retry_number: u64) -> Self {
         if retry_number == 0 {
             panic!("Try number MUST be > 0 !");
         }
         self.retry_number = retry_number;
         self
     }
-    fn set_retry_delay(mut self, retry_delay: u64) -> HttpClient {
+
+    fn set_retry_delay(mut self, retry_delay: u64) -> Self {
         self.retry_delay = retry_delay;
         self
     }
@@ -246,27 +519,42 @@ impl BaseClient for HttpClient {
     fn url_root(&self) -> &Url {
         &self.url_root
     }
+
     fn timeout(&self) -> &u64 {
         &self.timeout
     }
+
     fn headers(&self) -> &HeaderMap {
         &self.headers
     }
+
     fn auth(&self) -> Option<&Box<dyn Authentication>> {
         self.auth.as_ref()
     }
+
     fn ssl_verify(&self) -> bool {
         self.ssl_verify
     }
+
     fn retry_number(&self) -> u64 {
         self.retry_number
     }
+
     fn retry_delay(&self) -> u64 {
         self.retry_delay
     }
 }
 
 impl HttpClient {
+    /// Makes a GET request.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Request path relative to the root URL
+    /// * `params` - Optional query parameters
+    /// * `headers` - Optional additional headers
+    /// * `timeout` - Optional custom timeout for this request
+    /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
     pub fn get(
         &self,
         path: String,
@@ -285,6 +573,17 @@ impl HttpClient {
             no_retry_on,
         )
     }
+
+    /// Makes a POST request.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Request path relative to the root URL
+    /// * `params` - Optional query parameters
+    /// * `data` - Optional request body
+    /// * `headers` - Optional additional headers
+    /// * `timeout` - Optional custom timeout for this request
+    /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
     pub fn post(
         &self,
         path: String,
@@ -304,6 +603,17 @@ impl HttpClient {
             no_retry_on,
         )
     }
+
+    /// Makes a PUT request.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Request path relative to the root URL
+    /// * `params` - Optional query parameters
+    /// * `data` - Optional request body
+    /// * `headers` - Optional additional headers
+    /// * `timeout` - Optional custom timeout for this request
+    /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
     pub fn put(
         &self,
         path: String,
@@ -323,6 +633,16 @@ impl HttpClient {
             no_retry_on,
         )
     }
+
+    /// Makes a DELETE request.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Request path relative to the root URL
+    /// * `params` - Optional query parameters
+    /// * `headers` - Optional additional headers
+    /// * `timeout` - Optional custom timeout for this request
+    /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
     pub fn delete(
         &self,
         path: String,
