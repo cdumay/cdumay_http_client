@@ -38,7 +38,7 @@ struct CreateUser {
 }
 
 // Create a REST client
-let client = RestClient::new("https://api.example.com").unwrap()
+let client = RestClient::new("https://api.example.com", None).unwrap()
     .set_timeout(30)
     .set_retry_number(3);
 
@@ -49,6 +49,7 @@ let result: Result<User> = client.get(
     None,    // No additional headers
     None,    // Use default timeout
     None,    // Use default retry behavior
+    None,    // No context
 );
 
 // POST request with type-safe request body and response
@@ -61,6 +62,7 @@ let result: Result<User> = client.post(
     "/users".to_string(),
     None,
     Some(new_user),
+    None,
     None,
     None,
     None,
@@ -87,11 +89,12 @@ struct User {
     email: String,
 }
 
-let client = RestClient::new("https://api.example.com").unwrap();
+let client = RestClient::new("https://api.example.com", None).unwrap();
 
 let result: Result<Vec<User>> = client.get(
     "/users".to_string(),
     Some(params),
+    None,
     None,
     None,
     None,
@@ -119,7 +122,7 @@ struct User {
     email: String,
 }
 
-let client = RestClient::new("https://api.example.com").unwrap();
+let client = RestClient::new("https://api.example.com", None).unwrap();
 
 match client.get::<User>(
     "/users/123".to_string(),
@@ -127,6 +130,7 @@ match client.get::<User>(
     None,
     None,
     Some(no_retry),
+    None,
 ) {
     Ok(user) => println!("Found user: {:?}", user),
     Err(e) => match e.kind {
@@ -152,7 +156,7 @@ struct User {
     email: String,
 }
 
-let client = RestClient::new("https://api.example.com").unwrap();
+let client = RestClient::new("https://api.example.com", None).unwrap();
 
 let mut headers = HeaderMap::new();
 headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.api+json"));
@@ -161,6 +165,7 @@ let result: Result<User> = client.get(
     "/users/123".to_string(),
     None,
     Some(headers),
+    None,
     None,
     None,
 );
@@ -181,7 +186,7 @@ struct User {
     email: String,
 }
 
-let client = RestClient::new("https://api.example.com").unwrap();
+let client = RestClient::new("https://api.example.com", None).unwrap();
 // PUT request to update multiple resources
 let updates = vec![
     User { id: 1, name: "Alice".to_string(), email: "alice@example.com".to_string() },
@@ -192,6 +197,7 @@ let result: Result<Vec<Value>> = client.put(
     "/users/bulk".to_string(),
     None,
     Some(updates),
+    None,
     None,
     None,
     None,
@@ -207,9 +213,12 @@ use cdumay_context::Context;
 use cdumay_error::{ErrorKind, Result};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, USER_AGENT};
 use reqwest::{Method, Url};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Deref;
+use serde_value::Value;
 
 /// A specialized REST client that handles JSON serialization/deserialization.
 ///
@@ -238,8 +247,8 @@ use std::fmt::Debug;
 ///     email: String,
 /// }
 ///
-/// let client = RestClient::new("https://api.example.com").unwrap();
-/// let result: Result<User> = client.get("/users/123".to_string(), None, None, None, None);
+/// let client = RestClient::new("https://api.example.com", None).unwrap();
+/// let result: Result<User> = client.get("/users/123".to_string(), None, None, None, None, None);
 /// ```
 #[derive(Debug)]
 pub struct RestClient {
@@ -272,18 +281,18 @@ impl ClientBuilder for RestClient {
     /// Returns `Result<RestClient>` which is:
     /// - `Ok(RestClient)` if client creation is successful
     /// - `Err` with an `InvalidUrl` error if URL parsing fails
-    fn new(url_root: &str) -> Result<RestClient> {
+    fn new(url_root: &str, context: Option<&mut Context>) -> Result<RestClient> {
         Ok(RestClient {
             url_root: Url::parse(url_root.trim_end_matches("/")).map_err(|err| {
                 InvalidUrl::new()
                     .set_message(format!("Failed to parse URL: {:?}", err))
                     .set_details({
-                        let mut context = BTreeMap::new();
-                        context.insert(
-                            "url".to_string(),
-                            serde_value::Value::String(url_root.to_string()),
-                        );
-                        context
+                        let mut err_context = Context::new();
+                        if let Some(ctx) = context {
+                            err_context.extend(ctx.deref().clone().into());
+                        };
+                        err_context.insert("url".to_string(), Value::String(url_root.to_string()));
+                        err_context.into()
                     })
             })?,
             timeout: 10,
@@ -411,6 +420,7 @@ impl RestClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     ///
     /// # Returns
     ///
@@ -424,9 +434,10 @@ impl RestClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<R>
     where
-        for<'a> R: Deserialize<'a>,
+        R: DeserializeOwned,
     {
         Ok(serde_json::from_str(&self.do_request(
             Method::GET,
@@ -436,8 +447,9 @@ impl RestClient {
             headers,
             timeout,
             no_retry_on,
+            context.clone(),
         )?)
-        .map_err(|err| json_error_serialize(err, Some(self.create_context(path, Method::GET))))?)
+        .map_err(|err| json_error_serialize(err, Some(context.unwrap_or(self.create_context(path, Method::GET)))))?)
     }
 
     /// Makes a POST request with an optional body and deserializes the JSON response.
@@ -455,6 +467,7 @@ impl RestClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     ///
     /// # Returns
     ///
@@ -469,14 +482,15 @@ impl RestClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<R>
     where
-        for<'a> R: Deserialize<'a>,
         D: Serialize + Debug,
+        R: DeserializeOwned,
     {
         let payload = match data {
             Some(txt) => Some(serde_json::to_string(&txt).map_err(|err| {
-                json_error_serialize(err, Some(self.create_context(path.clone(), Method::POST)))
+                json_error_serialize(err, Some(context.clone().unwrap_or(self.create_context(path.clone(), Method::POST))))
             })?),
             None => None,
         };
@@ -488,8 +502,10 @@ impl RestClient {
             headers,
             timeout,
             no_retry_on,
+            context.clone(),
         )?)
-        .map_err(|err| json_error_serialize(err, Some(self.create_context(path, Method::POST))))?)
+        .map_err(|err| json_error_serialize(err, Some(
+            context.clone().unwrap_or(self.create_context(path, Method::POST)))))?)
     }
 
     /// Makes a PUT request with an optional body and deserializes the JSON response.
@@ -507,6 +523,7 @@ impl RestClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     ///
     /// # Returns
     ///
@@ -521,14 +538,15 @@ impl RestClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<R>
     where
-        for<'a> R: Deserialize<'a>,
         D: Serialize + Debug,
+        R: DeserializeOwned,
     {
         let payload = match data {
             Some(txt) => Some(serde_json::to_string(&txt).map_err(|err| {
-                json_error_serialize(err, Some(self.create_context(path.clone(), Method::PUT)))
+                json_error_serialize(err, Some(context.clone().unwrap_or(self.create_context(path.clone(), Method::PUT))))
             })?),
             None => None,
         };
@@ -540,8 +558,9 @@ impl RestClient {
             headers,
             timeout,
             no_retry_on,
+            context.clone(),
         )?)
-        .map_err(|err| json_error_serialize(err, Some(self.create_context(path, Method::PUT))))?)
+        .map_err(|err| json_error_serialize(err, Some(context.clone().unwrap_or(self.create_context(path, Method::PUT)))))?)
     }
 
     /// Makes a DELETE request and deserializes the JSON response.
@@ -557,6 +576,7 @@ impl RestClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     ///
     /// # Returns
     ///
@@ -570,9 +590,10 @@ impl RestClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<R>
     where
-        for<'a> R: Deserialize<'a>,
+        R: DeserializeOwned,
     {
         Ok(serde_json::from_str(&self.do_request(
             Method::DELETE,
@@ -582,9 +603,10 @@ impl RestClient {
             headers,
             timeout,
             no_retry_on,
+            context.clone(),
         )?)
         .map_err(|err| {
-            json_error_serialize(err, Some(self.create_context(path, Method::DELETE)))
+            json_error_serialize(err, Some(context.unwrap_or(self.create_context(path, Method::DELETE))))
         })?)
     }
 }
@@ -625,8 +647,8 @@ mod test {
     #[test]
     fn test_get() {
         init_logger();
-        let cli = RestClient::new("https://dummyjson.com").unwrap();
-        let result = cli.get::<Todo>("/todos/1".into(), None, None, None, None);
+        let cli = RestClient::new("https://dummyjson.com", None).unwrap();
+        let result = cli.get::<Todo>("/todos/1".into(), None, None, None, None, None);
         match result {
             Ok(todo) => assert_eq!(todo.user_id, 152),
             Err(err) => panic!("{}", err),
@@ -636,11 +658,11 @@ mod test {
     #[test]
     fn test_get_payload_error() {
         init_logger();
-        let cli = RestClient::new("https://dummyjson.com")
+        let cli = RestClient::new("https://dummyjson.com", None)
             .unwrap()
             .set_retry_number(2)
             .set_retry_delay(1);
-        let result = cli.get::<Foo>("/todos/1".into(), None, None, None, None);
+        let result = cli.get::<Foo>("/todos/1".into(), None, None, None, None, None);
         match result {
             Ok(_) => panic!("No error raised!"),
             Err(err) => assert_eq!(err.kind, DataError),
@@ -649,11 +671,11 @@ mod test {
     #[test]
     fn test_get_response_error() {
         init_logger();
-        let cli = RestClient::new("https://dummyjson.com")
+        let cli = RestClient::new("https://dummyjson.com", None)
             .unwrap()
             .set_retry_number(2)
             .set_retry_delay(1);
-        let result = cli.get::<Todo>("/todos/a".into(), None, None, None, Some(vec![NOT_FOUND]));
+        let result = cli.get::<Todo>("/todos/a".into(), None, None, None, Some(vec![NOT_FOUND]), None);
         match result {
             Ok(_) => panic!("No error raised!"),
             Err(err) => assert_eq!(err.kind, NOT_FOUND),

@@ -21,7 +21,7 @@ For public endpoints that don't require authentication:
 use cdumay_http_client::{ClientBuilder, HttpClient};
 use cdumay_http_client::authentication::NoAuth;
 
-let client = HttpClient::new("https://api.example.com").unwrap()
+let client = HttpClient::new("https://api.example.com", None).unwrap()
     .set_auth(NoAuth);
 ```
 
@@ -39,7 +39,7 @@ let auth = BasicAuth::new(
     Some("password".to_string())
 );
 
-let client = HttpClient::new("https://api.example.com").unwrap()
+let client = HttpClient::new("https://api.example.com", None).unwrap()
     .set_auth(auth);
 
 // With username only
@@ -80,7 +80,7 @@ let auth = BearerAuth {
     token: "your-token".to_string()
 };
 
-let client = HttpClient::new("https://api.example.com").unwrap()
+let client = HttpClient::new("https://api.example.com", None).unwrap()
     .set_auth(auth);
 ```
 */
@@ -145,7 +145,7 @@ pub trait Authentication: Debug {
 /// use cdumay_http_client::{ClientBuilder, HttpClient};
 /// use cdumay_http_client::authentication::NoAuth;
 ///
-/// let client = HttpClient::new("https://api.example.com").unwrap()
+/// let client = HttpClient::new("https://api.example.com", None).unwrap()
 ///     .set_auth(NoAuth);
 /// ```
 #[derive(Debug)]

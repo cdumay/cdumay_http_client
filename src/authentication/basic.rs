@@ -27,12 +27,13 @@ let auth = BasicAuth::new(
 );
 
 // Create client with basic authentication
-let client = HttpClient::new("https://api.example.com").unwrap()
+let client = HttpClient::new("https://api.example.com", None).unwrap()
     .set_auth(auth);
 
 // Make authenticated request
 let response = client.get(
     "/protected-resource".to_string(),
+    None,
     None,
     None,
     None,

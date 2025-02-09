@@ -27,7 +27,7 @@ use cdumay_error::Result;
 
 fn main() -> Result<()> {
     // Create a new HTTP client
-    let client = HttpClient::new("https://dummyjson.com")?
+    let client = HttpClient::new("https://dummyjson.com", None)?
         .set_timeout(30)  // Set timeout to 30 seconds
         .set_ssl_verify(true);
 
@@ -38,6 +38,7 @@ fn main() -> Result<()> {
         None,  // No additional headers
         None,  // Use default timeout
         None,  // Use default retry behavior
+        None,  // No context
     );
 
     println!("Response: {:?}", response);
@@ -60,13 +61,14 @@ struct User {
 
 fn create_user() -> Result<User> {
     // Create a new REST client
-    let client = RestClient::new("https://dummyjson.com")?
+    let client = RestClient::new("https://dummyjson.com", None)?
         .set_timeout(30)
         .set_ssl_verify(true);
 
     // Make a GET request with automatic JSON deserialization
     let user: User = client.get(
         "/users/1".to_string(),
+        None,
         None,
         None,
         None,
@@ -83,6 +85,7 @@ fn create_user() -> Result<User> {
         "/users".to_string(),
         None,
         Some(new_user),
+        None,
         None,
         None,
         None,
@@ -117,7 +120,7 @@ impl Authentication for BearerAuth {
 
 // Using authentication with a client
 let auth = BearerAuth { token: "your-token".to_string() };
-let client = HttpClient::new("https://dummyjson.com").unwrap()
+let client = HttpClient::new("https://dummyjson.com", None).unwrap()
     .set_auth(auth);
 ```
 
@@ -134,7 +137,7 @@ use cdumay_error::Result;
 // Specify error kinds to not retry on
 let no_retry_on = vec![NOT_FOUND, FORBIDDEN];
 
-let client = HttpClient::new("https://dummyjson.com").unwrap();
+let client = HttpClient::new("https://dummyjson.com", None).unwrap();
 
 let result: Result<String> = client.get(
     "/users/1".to_string(),
@@ -142,6 +145,7 @@ let result: Result<String> = client.get(
     None,
     None,
     Some(no_retry_on),
+    None,
 );
 ```
 
@@ -152,7 +156,7 @@ Both clients support automatic retry with configurable attempts and delay:
 ```rust
 use cdumay_http_client::{HttpClient, ClientBuilder};
 
-let client = HttpClient::new("https://dummyjson.com").unwrap()
+let client = HttpClient::new("https://dummyjson.com", None).unwrap()
     .set_retry_number(3)    // Maximum 3 retry attempts
     .set_retry_delay(1);    // 1 second delay between retries
 ```

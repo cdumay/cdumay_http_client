@@ -29,7 +29,7 @@ use cdumay_http_client::{ClientBuilder, HttpClient};
 use std::collections::HashMap;
 
 // Create a new client
-let client = HttpClient::new("https://api.example.com").unwrap()
+let client = HttpClient::new("https://api.example.com", None).unwrap()
     .set_timeout(30)       // 30 seconds timeout
     .set_retry_number(3)   // Retry 3 times
     .set_retry_delay(5);   // 5 seconds between retries
@@ -41,6 +41,7 @@ let result = client.get(
     None,                  // No additional headers
     None,                  // Use default timeout
     None,                  // Use default retry behavior
+    None,                  // No context
 );
 
 // Make a POST request with data
@@ -51,6 +52,7 @@ let result = client.post(
     None,                  // No additional headers
     None,                  // Use default timeout
     None,                  // Use default retry behavior
+    None,                  // No context
 );
 ```
 
@@ -64,11 +66,12 @@ let mut params = HashMap::new();
 params.insert("page".to_string(), "1".to_string());
 params.insert("limit".to_string(), "10".to_string());
 
-let client = HttpClient::new("https://api.example.com").unwrap();
+let client = HttpClient::new("https://api.example.com", None).unwrap();
 
 let result = client.get(
     "/users".to_string(),
     Some(params),
+    None,
     None,
     None,
     None,
@@ -84,13 +87,14 @@ use cdumay_http_client::{ClientBuilder, HttpClient};
 let mut headers = HeaderMap::new();
 headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-let client = HttpClient::new("https://api.example.com").unwrap();
+let client = HttpClient::new("https://api.example.com", None).unwrap();
 
 let result = client.post(
     "/users".to_string(),
     None,
     Some("{'name':'John'}".to_string()),
     Some(headers),
+    None,
     None,
     None,
 );
@@ -109,7 +113,7 @@ let no_retry = vec![
     FORBIDDEN
 ];
 
-let client = HttpClient::new("https://api.example.com").unwrap();
+let client = HttpClient::new("https://api.example.com", None).unwrap();
 
 let result = client.get(
     "/users/123".to_string(),
@@ -117,6 +121,7 @@ let result = client.get(
     None,
     None,
     Some(no_retry),
+    None,
 );
 ```
 
@@ -131,7 +136,7 @@ let auth = BasicAuth::new(
     Some("password".to_string())
 );
 
-let client = HttpClient::new("https://api.example.com").unwrap()
+let client = HttpClient::new("https://api.example.com", None).unwrap()
     .set_auth(auth);
 ```
 */
@@ -143,7 +148,8 @@ use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::{Method, Url};
 use serde_value::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::ops::Deref;
 use std::thread;
 use std::time::Duration;
 
@@ -169,7 +175,7 @@ pub trait ClientBuilder {
     /// Returns `Result<Self>` which is:
     /// - `Ok(Self)` if client creation is successful
     /// - `Err` with an `InvalidUrl` error if URL parsing fails
-    fn new(url_root: &str) -> Result<Self>
+    fn new(url_root: &str, context: Option<&mut Context>) -> Result<Self>
     where
         Self: Sized;
 
@@ -186,10 +192,10 @@ pub trait ClientBuilder {
     fn set_ssl_verify(self, ssl_verify: bool) -> Self;
 
     /// Sets the number of retry attempts for failed requests.
-    fn set_retry_number(self, try_number: u64) -> Self;
+    fn set_retry_number(self, retry_number: u64) -> Self;
 
     /// Sets the delay between retry attempts in seconds.
-    fn set_retry_delay(self, try_number: u64) -> Self;
+    fn set_retry_delay(self, retry_delay: u64) -> Self;
 }
 
 /// Base trait for HTTP client implementations.
@@ -241,6 +247,7 @@ pub trait BaseClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     ///
     /// # Returns
     ///
@@ -256,10 +263,11 @@ pub trait BaseClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<String> {
         let start = Utc::now();
         let url = build_url(self.url_root(), path, params)?;
-        let mut context = Context::default();
+        let mut context = context.unwrap_or_default();
         context.insert("url".into(), Value::String(url.to_string()));
         context.insert("method".into(), Value::String(method.to_string()));
         let cli = Client::builder()
@@ -375,6 +383,7 @@ pub trait BaseClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     ///
     /// # Returns
     ///
@@ -388,6 +397,7 @@ pub trait BaseClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<()> {
         self.do_request(
             Method::HEAD,
@@ -397,6 +407,7 @@ pub trait BaseClient {
             headers,
             timeout,
             no_retry_on,
+            context,
         )?;
         Ok(())
     }
@@ -419,7 +430,7 @@ pub trait BaseClient {
 /// use cdumay_http_client::authentication::basic::BasicAuth;
 ///
 /// // Create a client with basic authentication
-/// let client = HttpClient::new("https://api.example.com").unwrap()
+/// let client = HttpClient::new("https://api.example.com", None).unwrap()
 ///     .set_timeout(30)
 ///     .set_auth(BasicAuth::new(
 ///         "username".to_string(),
@@ -431,6 +442,7 @@ pub trait BaseClient {
 /// // Make a GET request
 /// let result = client.get(
 ///     "/users".to_string(),
+///     None,
 ///     None,
 ///     None,
 ///     None,
@@ -449,15 +461,18 @@ pub struct HttpClient {
 }
 
 impl ClientBuilder for HttpClient {
-    fn new(url_root: &str) -> Result<Self> {
+    fn new(url_root: &str, context: Option<&mut Context>) -> Result<Self> {
         Ok(HttpClient {
             url_root: Url::parse(url_root.trim_end_matches("/")).map_err(|err| {
                 InvalidUrl::new()
                     .set_message(format!("Failed to parse URL: {:?}", err))
                     .set_details({
-                        let mut context = BTreeMap::new();
-                        context.insert("url".to_string(), Value::String(url_root.to_string()));
-                        context
+                        let mut err_context = Context::new();
+                        if let Some(ctx) = context {
+                            err_context.extend(ctx.deref().clone().into());
+                        };
+                        err_context.insert("url".to_string(), Value::String(url_root.to_string()));
+                        err_context.into()
                     })
             })?,
             timeout: 10,
@@ -555,6 +570,7 @@ impl HttpClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     pub fn get(
         &self,
         path: String,
@@ -562,6 +578,7 @@ impl HttpClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<String> {
         self.do_request(
             Method::GET,
@@ -571,6 +588,7 @@ impl HttpClient {
             headers,
             timeout,
             no_retry_on,
+            context,
         )
     }
 
@@ -584,6 +602,7 @@ impl HttpClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     pub fn post(
         &self,
         path: String,
@@ -592,6 +611,7 @@ impl HttpClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<String> {
         self.do_request(
             Method::POST,
@@ -601,6 +621,7 @@ impl HttpClient {
             headers,
             timeout,
             no_retry_on,
+            context,
         )
     }
 
@@ -614,6 +635,7 @@ impl HttpClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     pub fn put(
         &self,
         path: String,
@@ -622,6 +644,7 @@ impl HttpClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<String> {
         self.do_request(
             Method::PUT,
@@ -631,6 +654,7 @@ impl HttpClient {
             headers,
             timeout,
             no_retry_on,
+            context,
         )
     }
 
@@ -643,6 +667,7 @@ impl HttpClient {
     /// * `headers` - Optional additional headers
     /// * `timeout` - Optional custom timeout for this request
     /// * `no_retry_on` - Optional list of error kinds that should not trigger retry
+    /// * `context` - Optional context for error reporting
     pub fn delete(
         &self,
         path: String,
@@ -650,6 +675,7 @@ impl HttpClient {
         headers: Option<HeaderMap>,
         timeout: Option<u64>,
         no_retry_on: Option<Vec<ErrorKind>>,
+        context: Option<Context>,
     ) -> Result<String> {
         self.do_request(
             Method::DELETE,
@@ -659,6 +685,7 @@ impl HttpClient {
             headers,
             timeout,
             no_retry_on,
+            context,
         )
     }
 }
@@ -685,27 +712,28 @@ mod test {
     #[test]
     fn test_no_auth() {
         init_logger();
-        let cli = HttpClient::new("https://www.rust-lang.org").unwrap();
-        let result = cli.get("/learn/get-started".into(), None, None, None, None);
+        let cli = HttpClient::new("https://www.rust-lang.org", None).unwrap();
+        let result = cli.get("/learn/get-started".into(), None, None, None, None, None);
         assert_eq!(result.unwrap().starts_with("<!doctype html>"), true);
     }
 
     #[test]
     fn test_err() {
         init_logger();
-        let cli = HttpClient::new("https://www.rust-lang.org")
+        let cli = HttpClient::new("https://www.rust-lang.org", None)
             .unwrap()
             .set_retry_number(2)
             .set_retry_delay(1);
-        match cli.get("/sdq".into(), None, None, None, None) {
+        match cli.get("/sdq".into(), None, None, None, None, None) {
             Ok(_) => panic!("No error raised!"),
             Err(err) => assert_eq!(err.kind, UNPROCESSABLE_ENTITY),
         };
     }
+
     #[test]
     fn test_err_no_retry() {
         init_logger();
-        let cli = HttpClient::new("https://www.rust-lang.org")
+        let cli = HttpClient::new("https://www.rust-lang.org", None)
             .unwrap()
             .set_retry_number(2)
             .set_retry_delay(1);
@@ -715,6 +743,7 @@ mod test {
             None,
             None,
             Some(vec![UNPROCESSABLE_ENTITY]),
+            None,
         ) {
             Ok(_) => panic!("No error raised!"),
             Err(err) => {
