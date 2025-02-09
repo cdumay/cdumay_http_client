@@ -1,4 +1,9 @@
 /*!
+[![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue)](./LICENSE)
+[![cdumay_http_client on crates.io](https://img.shields.io/crates/v/cdumay_http_client)](https://crates.io/crates/cdumay_http_client)
+[![cdumay_http_client on docs.rs](https://docs.rs/cdumay_http_client/badge.svg)](https://docs.rs/cdumay_http_client)
+[![Source Code Repository](https://img.shields.io/badge/Code-On%20GitHub-blue?logo=GitHub)](https://github.com/cdumay/cdumay_http_client)
+
 A flexible and robust HTTP client library for Rust that provides both basic HTTP and REST client implementations.
 
 # Features
